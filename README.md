@@ -147,6 +147,12 @@ Example Response:
 
 ---
 
+## Screenshots
+<img width="1468" height="798" alt="Screenshot 2026-03-31 at 12 27 45 AM" src="https://github.com/user-attachments/assets/08342bfd-67bd-460e-b698-4e79e3b61762" />
+<img width="1468" height="798" alt="Screenshot 2026-03-31 at 12 27 54 AM" src="https://github.com/user-attachments/assets/c195394e-bf55-4fc4-a152-6c767a79161c" />
+
+
+---
 ## ⚠️ Limitations
 
 * AI logic is rule-based (not using real LLM)
