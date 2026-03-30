@@ -9,17 +9,17 @@ app = FastAPI()
 Base.metadata.create_all(bind=engine)
 
 # -------------------------------
-# Seed Employees (FINAL)
+# Seed Employees
 # -------------------------------
 def seed_employees():
     db = SessionLocal()
 
     if db.query(Employee).count() == 0:
         employees = [
-            Employee(name="Rahul", department="IT", skill="Access", current_load=2, availability="Available"),
-            Employee(name="Ankit", department="Engineering", skill="DB", current_load=1, availability="Available"),
-            Employee(name="Neha", department="Finance", skill="Payroll", current_load=3, availability="Busy"),
-            Employee(name="Riya", department="Support", skill="Network", current_load=1, availability="Available"),  # ✅ FIXED
+            Employee(name="Rahul", email="rahul@company.com", role="IT Support", department="IT", skill="Access", current_load=2, availability="Available"),
+            Employee(name="Ankit", email="ankit@company.com", role="Backend Engineer", department="Engineering", skill="DB", current_load=1, availability="Available"),
+            Employee(name="Neha", email="neha@company.com", role="Finance Executive", department="Finance", skill="Payroll", current_load=3, availability="Busy"),
+            Employee(name="Riya", email="riya@company.com", role="Network Engineer", department="Support", skill="Network", current_load=1, availability="Available"),
         ]
 
         db.add_all(employees)
@@ -30,7 +30,7 @@ def seed_employees():
 seed_employees()
 
 # -------------------------------
-# Smart Assignment (FINAL FIX)
+# Smart Assignment
 # -------------------------------
 def assign_employee(department):
     db = SessionLocal()
@@ -43,17 +43,18 @@ def assign_employee(department):
     if employees:
         selected = employees[0]
 
-        # ✅ FIX (save before closing session)
-        employee_name = selected.name
+        name = selected.name
+        email = selected.email
+        role = selected.role
 
         selected.current_load += 1
         db.commit()
         db.close()
 
-        return employee_name
+        return f"{name} ({role}) - {email}"
 
     db.close()
-    return "Support Team (fallback)"  # ✅ fallback added
+    return "Support Team (fallback)"
 
 # -------------------------------
 # Request Model
@@ -80,30 +81,51 @@ def create_ticket(ticket: TicketInput):
 
         employee = assign_employee(ai_result["department"])
 
+        status = "Resolved" if ai_result["resolution"] == "Auto-resolve" else "Assigned"
+
         new_ticket = Ticket(
             description=ticket.description,
             category=ai_result["category"],
             severity=ai_result["severity"],
-            status="Resolved" if ai_result["resolution"] == "Auto-resolve" else "Assigned",
+            status=status,
             department=ai_result["department"],
-            assigned_to=employee
+            assigned_to=employee,
+            timeline=f"Created -> {status}"
         )
 
         db.add(new_ticket)
         db.commit()
         db.refresh(new_ticket)
 
+        # Auto-response
         if ai_result["resolution"] == "Auto-resolve":
-            response_message = "Your issue has been resolved automatically."
+            response_message = f"""
+We have analyzed your issue:
+
+{ai_result['summary']}
+
+Suggested resolution:
+Please follow the standard steps.
+
+Estimated time: {ai_result['estimated_time']}
+
+Was this helpful? (Yes / No)
+"""
         else:
-            response_message = f"Your issue has been assigned to {employee} from {ai_result['department']} department."
+            response_message = f"""
+Assigned to {employee}
+
+Department: {ai_result['department']}
+Severity: {ai_result['severity']}
+Estimated time: {ai_result['estimated_time']}
+"""
 
         return {
             "ticket_id": new_ticket.id,
             "description": ticket.description,
             "ai_analysis": ai_result,
             "assigned_to": employee,
-            "status": new_ticket.status,
+            "status": status,
             "response": response_message
         }
 
@@ -113,8 +135,60 @@ def create_ticket(ticket: TicketInput):
     finally:
         db.close()
 
+
+@app.put("/ticket/{ticket_id}/status")
+def update_status(ticket_id: int, new_status: str, note: str = ""):
+    db = SessionLocal()
+
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+
+    if not ticket:
+        return {"error": "Ticket not found"}
+
+    ticket.status = new_status
+
+    if note:
+        ticket.notes += f"\n{note}"
+
+    ticket.timeline += f" -> {new_status}"
+
+    db.commit()
+    db.refresh(ticket)
+
+    db.close()
+
+    return {
+        "ticket_id": ticket.id,
+        "status": ticket.status,
+        "notes": ticket.notes,
+        "timeline": ticket.timeline
+    }
+
 # -------------------------------
-# Analytics
+# GET TICKET DETAILS
+# -------------------------------
+@app.get("/ticket/{ticket_id}")
+def get_ticket(ticket_id: int):
+    db = SessionLocal()
+
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+
+    if not ticket:
+        return {"error": "Ticket not found"}
+
+    db.close()
+
+    return {
+        "ticket_id": ticket.id,
+        "description": ticket.description,
+        "status": ticket.status,
+        "assigned_to": ticket.assigned_to,
+        "timeline": ticket.timeline,
+        "notes": ticket.notes
+    }
+
+# -------------------------------
+# ANALYTICS
 # -------------------------------
 @app.get("/analytics")
 def analytics():
